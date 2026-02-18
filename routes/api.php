@@ -22,12 +22,16 @@ Route::get('/health', fn () => ApiResponse::success([
     'version'   => env('APP_VERSION') ?: trim((string) shell_exec('git rev-parse --short HEAD')) ?: 'unknown',
 ]));
 
-Route::prefix('templates')->group(function () {
-    Route::post('/', [TemplateController::class, 'store']);
-    Route::get('/', [TemplateController::class, 'index']);
-    Route::get('/{template}', [TemplateController::class, 'show']);
-    Route::put('/{template}', [TemplateController::class, 'update']);
-    Route::delete('/{template}', [TemplateController::class, 'destroy']);
+Route::prefix('templates')
+    ->middleware('jwt.admin')
+    ->group(function () {
+        Route::middleware('admin.super')->group(function () {
+            Route::post('/', [TemplateController::class, 'store']);
+            Route::get('/', [TemplateController::class, 'index']);
+            Route::get('/{template}', [TemplateController::class, 'show']);
+            Route::put('/{template}', [TemplateController::class, 'update']);
+            Route::delete('/{template}', [TemplateController::class, 'destroy']);
+        });
 
-    Route::post('/{key}/render', TemplateRenderController::class);
-});
+        Route::post('/{key}/render', TemplateRenderController::class);
+    });
