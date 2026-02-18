@@ -11,6 +11,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Intentionally left empty — template service seeds are added per-feature when needed.
+        $this->call([
+            TemplateSeeder::class,
+        ]);
     }
 }
