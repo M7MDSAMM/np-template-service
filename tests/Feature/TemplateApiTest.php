@@ -4,11 +4,35 @@ namespace Tests\Feature;
 
 use App\Models\Template;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Firebase\JWT\JWT;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class TemplateApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    private string $privateKey;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        [$private, $public] = $this->generateKeyPair();
+        $this->privateKey = $private;
+
+        $dir = storage_path('app/keys');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        file_put_contents($dir.'/jwt-public.pem', $public);
+
+        config([
+            'jwt.keys.public' => $dir.'/jwt-public.pem',
+            'jwt.issuer'      => 'user-service',
+            'jwt.audience'    => 'notification-platform',
+        ]);
+    }
 
     public function test_create_template_returns_envelope_and_persists(): void
     {
@@ -26,7 +50,7 @@ class TemplateApiTest extends TestCase
             'is_active'        => true,
         ];
 
-        $response = $this->postJson('/api/v1/templates', $payload);
+        $response = $this->withToken($this->makeToken('super_admin'))->postJson('/api/v1/templates', $payload);
 
         $response->assertCreated()
             ->assertJsonPath('success', true)
@@ -40,7 +64,7 @@ class TemplateApiTest extends TestCase
     {
         $template = Template::factory()->create(['key' => 'order_shipped']);
 
-        $response = $this->getJson('/api/v1/templates/order_shipped');
+        $response = $this->withToken($this->makeToken('super_admin'))->getJson('/api/v1/templates/order_shipped');
 
         $response->assertOk()
             ->assertJsonPath('data.key', $template->key)
@@ -51,7 +75,7 @@ class TemplateApiTest extends TestCase
     {
         Template::factory()->count(3)->create();
 
-        $response = $this->getJson('/api/v1/templates');
+        $response = $this->withToken($this->makeToken('super_admin'))->getJson('/api/v1/templates');
 
         $response->assertOk()
             ->assertJsonPath('meta.pagination.current_page', 1)
@@ -68,7 +92,7 @@ class TemplateApiTest extends TestCase
             ],
         ]);
 
-        $response = $this->postJson('/api/v1/templates/welcome_email/render', [
+        $response = $this->withToken($this->makeToken('admin'))->postJson('/api/v1/templates/welcome_email/render', [
             'variables' => ['user_name' => 'Mohammad', 'otp' => '1234'],
         ]);
 
@@ -86,12 +110,42 @@ class TemplateApiTest extends TestCase
             ],
         ]);
 
-        $response = $this->postJson('/api/v1/templates/welcome_email/render', [
+        $response = $this->withToken($this->makeToken('admin'))->postJson('/api/v1/templates/welcome_email/render', [
             'variables' => ['user_name' => 'Mohammad'],
         ]);
 
         $response->assertUnprocessable()
             ->assertJsonPath('success', false)
             ->assertJsonPath('error_code', 'VALIDATION_ERROR');
+    }
+
+    private function makeToken(string $role = 'admin'): string
+    {
+        $now = time();
+        $payload = [
+            'iss'  => 'user-service',
+            'aud'  => 'notification-platform',
+            'sub'  => 'admin-uuid',
+            'typ'  => 'admin',
+            'role' => $role,
+            'iat'  => $now,
+            'exp'  => $now + 3600,
+        ];
+
+        return JWT::encode($payload, $this->privateKey, 'RS256');
+    }
+
+    private function generateKeyPair(): array
+    {
+        $res = openssl_pkey_new([
+            'private_key_bits' => 2048,
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+        ]);
+
+        openssl_pkey_export($res, $privateKey);
+        $pub = openssl_pkey_get_details($res);
+        $publicKey = $pub['key'];
+
+        return [$privateKey, $publicKey];
     }
 }
