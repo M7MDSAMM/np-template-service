@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\TemplateController;
 use App\Http\Responses\ApiResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -19,3 +20,11 @@ Route::get('/health', fn () => ApiResponse::success([
     'timestamp' => now()->toIso8601String(),
     'version'   => env('APP_VERSION') ?: trim((string) shell_exec('git rev-parse --short HEAD')) ?: 'unknown',
 ]));
+
+Route::prefix('templates')->group(function () {
+    Route::post('/', [TemplateController::class, 'store']);
+    Route::get('/', [TemplateController::class, 'index']);
+    Route::get('/{template}', [TemplateController::class, 'show']);
+    Route::put('/{template}', [TemplateController::class, 'update']);
+    Route::delete('/{template}', [TemplateController::class, 'destroy']);
+});
