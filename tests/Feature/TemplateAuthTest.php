@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Template;
 use Firebase\JWT\JWT;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class TemplateAuthTest extends TestCase
@@ -13,7 +12,6 @@ class TemplateAuthTest extends TestCase
     use RefreshDatabase;
 
     private string $privateKey;
-    private string $publicKeyPath;
 
     protected function setUp(): void
     {
@@ -22,18 +20,13 @@ class TemplateAuthTest extends TestCase
         [$private, $public] = $this->generateKeyPair();
         $this->privateKey = $private;
 
-        Storage::fake('local');
-        $dir = storage_path('app/keys');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        $this->publicKeyPath = $dir.'/jwt-public.pem';
-        file_put_contents($this->publicKeyPath, $public);
-
+        // Pass the PEM content directly via config so tests never touch the
+        // production key file at storage/app/keys/jwt-public.pem.
         config([
-            'jwt.keys.public' => $this->publicKeyPath,
-            'jwt.issuer'      => 'user-service',
-            'jwt.audience'    => 'notification-platform',
+            'jwt.keys.public_content' => $public,
+            'jwt.keys.public'         => null,
+            'jwt.issuer'              => 'user-service',
+            'jwt.audience'            => 'notification-platform',
         ]);
     }
 

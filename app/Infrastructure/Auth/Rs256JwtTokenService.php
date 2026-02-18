@@ -10,7 +10,7 @@ use Firebase\JWT\Key;
 
 class Rs256JwtTokenService implements JwtTokenServiceInterface
 {
-    private string $publicKeyPath;
+    private ?string $publicKeyPath;
     private string $issuer;
     private string $audience;
     private ?string $publicKeyContent;
@@ -57,7 +57,7 @@ class Rs256JwtTokenService implements JwtTokenServiceInterface
             return $pem !== false ? $pem : $this->publicKeyContent;
         }
 
-        if (is_readable($this->publicKeyPath)) {
+        if ($this->publicKeyPath && is_readable($this->publicKeyPath)) {
             return file_get_contents($this->publicKeyPath);
         }
 

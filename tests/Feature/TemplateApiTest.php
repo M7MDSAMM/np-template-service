@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Template;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Firebase\JWT\JWT;
-use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class TemplateApiTest extends TestCase
@@ -21,16 +20,13 @@ class TemplateApiTest extends TestCase
         [$private, $public] = $this->generateKeyPair();
         $this->privateKey = $private;
 
-        $dir = storage_path('app/keys');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        file_put_contents($dir.'/jwt-public.pem', $public);
-
+        // Pass the PEM content directly via config so tests never touch the
+        // production key file at storage/app/keys/jwt-public.pem.
         config([
-            'jwt.keys.public' => $dir.'/jwt-public.pem',
-            'jwt.issuer'      => 'user-service',
-            'jwt.audience'    => 'notification-platform',
+            'jwt.keys.public_content' => $public,
+            'jwt.keys.public'         => null,
+            'jwt.issuer'              => 'user-service',
+            'jwt.audience'            => 'notification-platform',
         ]);
     }
 
