@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\TemplateController;
+use App\Http\Controllers\TemplateRenderController;
 use App\Http\Responses\ApiResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -27,4 +28,6 @@ Route::prefix('templates')->group(function () {
     Route::get('/{template}', [TemplateController::class, 'show']);
     Route::put('/{template}', [TemplateController::class, 'update']);
     Route::delete('/{template}', [TemplateController::class, 'destroy']);
+
+    Route::post('/{key}/render', TemplateRenderController::class);
 });
