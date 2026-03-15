@@ -8,6 +8,7 @@ use Illuminate\Validation\ValidationException;
 use App\Http\Responses\ApiResponse;
 use App\Http\Middleware\CorrelationIdMiddleware;
 use App\Http\Middleware\JwtAdminAuthMiddleware;
+use App\Http\Middleware\RequestTimingMiddleware;
 use App\Http\Middleware\RequireSuperAdminMiddleware;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(CorrelationIdMiddleware::class);
+        $middleware->append(RequestTimingMiddleware::class);
 
         $middleware->alias([
             'jwt.admin'   => JwtAdminAuthMiddleware::class,
