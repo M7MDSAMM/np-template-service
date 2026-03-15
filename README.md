@@ -1,59 +1,75 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Template Service (Port 8004)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Stateless Laravel 12 JSON API responsible for **notification template management** and **template rendering**. It stores versioned, multi-channel templates and provides a rendering endpoint that other services use to compile final notification content with variable substitution.
 
-## About Laravel
+## Responsibilities
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- Template CRUD with automatic version bumping on updates.
+- Multi-channel support: `email`, `whatsapp`, `push`.
+- Variable schema definition per template (`required`, `optional`, `rules`).
+- Template rendering: accepts variables, validates against schema, returns compiled output.
+- Soft deletes for audit trail.
+- Super-admin authorization for all management operations; rendering available to any authenticated admin.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Database
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+**Database:** `np_template_service`
 
-## Learning Laravel
+| Table | Purpose |
+|-------|---------|
+| `templates` | Template definitions with key, name, channel, subject, body, variables_schema, version, is_active |
+| `jobs` | Laravel queue jobs (standard) |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## API Endpoints
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+All routes are prefixed with `/api/v1` and require JWT authentication (`Authorization: Bearer <token>`).
 
-## Laravel Sponsors
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| `GET` | `/health` | Public | Service health check |
+| `GET` | `/templates` | Super Admin | List templates (filterable by key, channel, is_active) |
+| `POST` | `/templates` | Super Admin | Create a new template |
+| `GET` | `/templates/{key}` | Super Admin | Get template by key |
+| `PUT` | `/templates/{key}` | Super Admin | Update template (auto-increments version) |
+| `DELETE` | `/templates/{key}` | Super Admin | Soft-delete template |
+| `POST` | `/templates/{key}/render` | Admin | Render template with variables |
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Architecture
 
-### Premium Partners
+- **Tech**: Laravel 12, PHP 8.2, MySQL.
+- **Auth**: RS256 JWT validation via `JwtAdminAuthMiddleware`. Tokens are issued by User Service.
+- **Middleware**:
+  - `CorrelationIdMiddleware` — propagates `X-Correlation-Id` on every request/response.
+  - `RequestTimingMiddleware` — logs method, route, status, latency, actor in structured JSON.
+  - `JwtAdminAuthMiddleware` — validates Bearer token; returns standardized error envelope on 401.
+  - `RequireSuperAdminMiddleware` — gates CRUD operations to `super_admin` role.
+- **Responses**: Standardized API envelope (`success`, `message`, `data`, `meta`, `correlation_id`).
+- **Rendering**: `TemplateRenderService` validates variables against the template's `variables_schema`, then performs substitution on subject and body.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## Local Setup
 
-## Contributing
+```bash
+cp .env.example .env
+composer install
+php artisan key:generate
+php artisan migrate
+php artisan serve --port=8004
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Requires MySQL with database `np_template_service` created.
 
-## Code of Conduct
+## Testing
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan test
+```
 
-## Security Vulnerabilities
+Tests run against MySQL database `np_template_service_test` (configured in `phpunit.xml`). Uses `RefreshDatabase` for isolation.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+**Test coverage:** 22 tests, 179 assertions — covers CRUD operations, validation, version bumping, rendering, soft deletes, auth, and authorization.
 
-## License
+## Notes
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- This is a **leaf service** — it does not make outbound calls to other services.
+- Templates are routed by their `key` field (not UUID), which must be unique and use `alpha_dash` format.
+- Inactive templates cannot be rendered (returns 409 Conflict).
