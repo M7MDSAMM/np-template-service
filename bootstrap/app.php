@@ -1,15 +1,19 @@
 <?php
 
+use App\Http\Middleware\CorrelationIdMiddleware;
+use App\Http\Middleware\JwtAdminAuthMiddleware;
+use App\Http\Middleware\RequestTimingMiddleware;
+use App\Http\Middleware\RequireSuperAdminMiddleware;
+use App\Http\Responses\ApiResponse;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
-use App\Http\Responses\ApiResponse;
-use App\Http\Middleware\CorrelationIdMiddleware;
-use App\Http\Middleware\JwtAdminAuthMiddleware;
-use App\Http\Middleware\RequestTimingMiddleware;
-use App\Http\Middleware\RequireSuperAdminMiddleware;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -38,27 +42,36 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
+        $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
-                return ApiResponse::notFound('Resource not found.', 'TEMPLATE_NOT_FOUND');
+                return ApiResponse::unauthorized($e->getMessage() ?: 'Unauthorized.');
+            }
+        });
+
+        $exceptions->render(function (AuthorizationException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::forbidden($e->getMessage() ?: 'Forbidden.');
+            }
+        });
+
+        $exceptions->render(function (ModelNotFoundException|NotFoundHttpException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::notFound('Resource not found.', 'NOT_FOUND');
             }
         });
 
         $exceptions->render(function (\Throwable $e, Request $request) {
-            if ($request->is('api/*') || $request->expectsJson()) {
-                $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
-
-                if ($status >= 500) {
-                    return ApiResponse::serverError(
-                        app()->hasDebugModeEnabled() ? $e->getMessage() : 'Internal server error.'
-                    );
-                }
-
-                return ApiResponse::error(
-                    $e->getMessage() ?: 'An error occurred.',
-                    'ERROR',
-                    $status,
-                );
+            if (! ($request->is('api/*') || $request->expectsJson())) {
+                return null;
             }
+
+            $status = $e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500;
+            $message = $e->getMessage() ?: 'An error occurred.';
+
+            if ($status >= 500) {
+                return ApiResponse::serverError(app()->hasDebugModeEnabled() ? $message : 'Internal server error.');
+            }
+
+            return ApiResponse::error($message, 'ERROR', $status);
         });
     })->create();

@@ -30,6 +30,15 @@ class TemplateAuthTest extends TestCase
         ]);
     }
 
+    public function test_health_returns_standardized_success_envelope(): void
+    {
+        $response = $this->getJson('/api/v1/health');
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonStructure(['message', 'data' => ['service', 'status'], 'meta', 'correlation_id']);
+    }
+
     public function test_unauthorized_request_returns_401_envelope(): void
     {
         $response = $this->getJson('/api/v1/templates');
@@ -37,7 +46,7 @@ class TemplateAuthTest extends TestCase
         $response->assertUnauthorized()
             ->assertJsonPath('success', false)
             ->assertJsonPath('error_code', 'AUTH_INVALID')
-            ->assertJsonStructure(['correlation_id']);
+            ->assertJsonStructure(['message', 'errors', 'error_code', 'correlation_id', 'meta']);
     }
 
     public function test_super_admin_can_create_template(): void
